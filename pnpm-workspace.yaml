@@ -1,0 +1,3 @@
+packages:
+  - "glammap-backend"
+  - "glammap-frontend"
