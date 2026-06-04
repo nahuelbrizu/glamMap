@@ -7,6 +7,7 @@ type Props = {
   userLocation: { lat: number; lng: number } | null;
   selectedBusiness: any;
   onSelectBusiness: (business: any) => void;
+  onMapClick?: () => void;
   initialCenter: { lat: number; lng: number };
   mapId: string;
 };
@@ -16,6 +17,7 @@ export const MapContainer = ({
   userLocation,
   selectedBusiness,
   onSelectBusiness,
+  onMapClick,
   initialCenter,
   mapId,
 }: Props) => {
@@ -32,6 +34,7 @@ export const MapContainer = ({
         
         style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}
         
+        onClick={onMapClick}
         gestureHandling="greedy"
         disableDefaultUI={true}
         

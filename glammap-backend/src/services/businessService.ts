@@ -54,51 +54,52 @@ export const getExploreBusinesses = async (
     const searchDistanceM = searchDistanceKm * 1000; // convert km → metres for ST_DWithin
 
     if (lat !== undefined && lng !== undefined) {
-        const cursorClause = cursor !== undefined ? `AND dist_m > $4` : '';
+        // Haversine query with bounding-box pre-filter (works without PostGIS)
+        // To use PostGIS instead, run 002_postgis_geography.sql and swap to the ST_DWithin query below.
+        const BOX_DEG = 0.5;
+        const cursorClause = cursor !== undefined ? `AND distance > $4` : '';
         const cursorValues: number[] = cursor !== undefined ? [cursor] : [];
 
-        // PostGIS ST_DWithin query (requires 002_postgis_geography.sql migration)
         query = `
             SELECT * FROM (
                 SELECT
                     id, name, type AS category, address, latitude, longitude,
                     rating_avg, banner_url, logo_url,
-                    ST_Distance(location, ST_MakePoint($2, $1)::geography) AS dist_m
+                    (6371 * acos(
+                        cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) +
+                        sin(radians($1)) * sin(radians(latitude))
+                    )) AS distance
                 FROM businesses
                 WHERE is_active = true
-                  AND ST_DWithin(location, ST_MakePoint($2, $1)::geography, $3)
+                  AND latitude  BETWEEN $1 - ${BOX_DEG} AND $1 + ${BOX_DEG}
+                  AND longitude BETWEEN $2 - ${BOX_DEG} AND $2 + ${BOX_DEG}
             ) AS stores_with_distance
-            WHERE dist_m <= $3
+            WHERE distance <= $3
             ${cursorClause}
-            ORDER BY dist_m ASC
+            ORDER BY distance ASC
             LIMIT ${limit};
         `;
-        values = [lat, lng, searchDistanceM, ...cursorValues];
+        values = [lat, lng, searchDistanceKm, ...cursorValues];
 
-        // Haversine fallback — use if PostGIS is not available:
-        // const BOX_DEG = 0.5;
-        // const cursorClause = cursor !== undefined ? `AND distance > $4` : '';
+        // PostGIS ST_DWithin query — requires 002_postgis_geography.sql migration:
+        // const cursorClause = cursor !== undefined ? `AND dist_m > $4` : '';
         // const cursorValues: number[] = cursor !== undefined ? [cursor] : [];
         // query = `
         //     SELECT * FROM (
         //         SELECT
         //             id, name, type AS category, address, latitude, longitude,
         //             rating_avg, banner_url, logo_url,
-        //             (6371 * acos(
-        //                 cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) +
-        //                 sin(radians($1)) * sin(radians(latitude))
-        //             )) AS distance
+        //             ST_Distance(location, ST_MakePoint($2, $1)::geography) AS dist_m
         //         FROM businesses
         //         WHERE is_active = true
-        //           AND latitude  BETWEEN $1 - ${BOX_DEG} AND $1 + ${BOX_DEG}
-        //           AND longitude BETWEEN $2 - ${BOX_DEG} AND $2 + ${BOX_DEG}
+        //           AND ST_DWithin(location, ST_MakePoint($2, $1)::geography, $3)
         //     ) AS stores_with_distance
-        //     WHERE distance <= $3
+        //     WHERE dist_m <= $3
         //     ${cursorClause}
-        //     ORDER BY distance ASC
+        //     ORDER BY dist_m ASC
         //     LIMIT ${limit};
         // `;
-        // values = [lat, lng, searchDistanceKm, ...cursorValues];
+        // values = [lat, lng, searchDistanceM, ...cursorValues];
     } else {
         query = `
             SELECT id, name, type AS category, address, latitude, longitude,
@@ -120,7 +121,7 @@ export const getExploreBusinesses = async (
         rating_avg: parseFloat(b.rating_avg) || 5.0,
         banner_url: b.banner_url || 'https://via.placeholder.com/400x200?text=Business',
         logo_url: b.logo_url,
-        distance: b.dist_m ? parseFloat(b.dist_m) / 1000 : null, // convert back to km for API response
+        distance: b.distance ? parseFloat(b.distance) : null, // already in km from Haversine
         position: {
             lat: parseFloat(b.latitude),
             lng: parseFloat(b.longitude),

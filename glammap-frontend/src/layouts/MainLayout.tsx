@@ -36,7 +36,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       className="flex flex-col h-screen overflow-hidden bg-[#f6f8f8] dark:bg-[#101f22] text-slate-900 dark:text-white transition-colors duration-200"
       aria-label="Main application layout"
     >
-      <main className="flex-grow relative overflow-y-auto no-scrollbar"> 
+      <main className="flex-1 min-h-0 relative overflow-hidden">
         {children}
       </main>
 
