@@ -1,24 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import type { UserRole } from "../types/index";
 
-export interface AuthRequest extends Request {
-  user?: any;
-}
-// Definimos la interfaz de lo que viene dentro de TU token
 interface TokenPayload {
-  id: string; // Tu UUID de Postgres
-  role: 'client' | 'business' | 'admin';
+  id: string;
+  role: UserRole;
 }
 
-/**
- * Middleware principal: Extrae y valida el token sin importar 
- * si el usuario se logueó originalmente con Google o Email.
- */
-export function authenticateToken(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+export function authenticateToken(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers["authorization"];
   const token = authHeader?.split(" ")[1];
 
@@ -27,30 +16,17 @@ export function authenticateToken(
   }
 
   try {
-    // Verificamos el token con tu secreto
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as TokenPayload;
-
-    // Inyectamos los datos en req.user (que ya extendiste en tu declaración global)
-    req.user = {
-      id: decoded.id,
-      role: decoded.role
-    };
-
+    req.user = { id: decoded.id, role: decoded.role };
     next();
-  } catch (err) {
-    // Si el token expiró o es falso, rechazamos
+  } catch {
     return res.status(403).json({ message: "Token inválido o expirado" });
   }
 }
 
-/**
- * Validador de Roles: Se usa después de authenticateToken.
- * Acepta un array de roles permitidos.
- */
-export const checkRole = (roles: Array<'client' | 'business' | 'admin'>) => {
+export const checkRole = (roles: UserRole[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    // Validamos que exista el usuario y que su rol esté en la lista permitida
-    if (!req.user || !roles.includes(req.user.role as any)) {
+    if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({ message: "Acceso denegado: permisos insuficientes" });
     }
     next();

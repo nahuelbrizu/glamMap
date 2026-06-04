@@ -1,16 +1,24 @@
-// src/controllers/reviewController.ts
-import { Request, Response } from 'express';
-import { pool } from '../config/db';
+import { Request, Response, NextFunction } from 'express';
 import * as reviewService from '../services/reviewService';
 
-export const createReview = async (req: Request, res: Response) => {
-    const { businessId, rating, comment, imageUrl } = req.body;
-    const userId = req.user.id;
+export const createReview = async (req: Request, res: Response, next: NextFunction) => {
+    const { id } = req.params; // appointment id from URL
+    const { rating, comment, imageUrl } = req.body as {
+        rating: number;
+        comment: string;
+        imageUrl: string;
+    };
 
     try {
-        await reviewService.createReview(businessId, userId, rating, comment, imageUrl);
-        res.status(201).json({ message: "Reseña enviada correctamente" });
+        await reviewService.createReview(
+            req.user.id,
+            parseInt(id, 10),
+            rating,
+            comment,
+            imageUrl ?? ''
+        );
+        res.status(201).json({ message: 'Reseña enviada correctamente' });
     } catch (error) {
-        res.status(500).json({ message: "Error al enviar reseña" });
+        next(error);
     }
 };

@@ -7,28 +7,28 @@ export const getAllUsers = async () => {
     return result.rows;
 };
 
-export const getUserProfile = async (userId: number) => {
+export const getUserProfile = async (userId: string) => {
     const result = await pool.query(
-        'SELECT id, name, email, role FROM users WHERE id = $1',
+        'SELECT id, name, email, role, avatar_url FROM users WHERE id = $1',
         [userId]
     );
     return result.rows[0];
 };
 
-export const updateNotificationPrefs = async (userId: number, prefs: any) => {
+export const updateProfile = async (userId: string, name: string, phone: string) => {
+    const result = await pool.query(
+        `UPDATE users
+         SET name = $1, phone = $2
+         WHERE id = $3
+         RETURNING id, name, email, phone, role, avatar_url`,
+        [name, phone, userId]
+    );
+    return result.rows[0];
+};
+
+export const updateNotificationPrefs = async (userId: string, prefs: unknown) => {
     await pool.query(
         'UPDATE users SET notification_prefs = $1 WHERE id = $2',
         [JSON.stringify(prefs), userId]
     );
-};
-
-export const updateProfile = async (userId: number, name: string, phone: string) => {
-    const query = `
-      UPDATE users 
-      SET name = $1, phone = $2 
-      WHERE id = $3 
-      RETURNING id, name, email, phone, role, avatar_url
-    `;
-    const result = await pool.query(query, [name, phone, userId]);
-    return result.rows[0];
 };

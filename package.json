@@ -1,6 +1,13 @@
 {
-	"dependencies": {
-		"pg": "^8.16.3",
-		"psql": "^0.0.1"
-	}
+  "name": "glammap",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "build": "pnpm -r build",
+    "start": "pnpm -r start"
+  },
+  "dependencies": {
+    "pg": "^8.16.3",
+    "psql": "^0.0.1"
+  }
 }

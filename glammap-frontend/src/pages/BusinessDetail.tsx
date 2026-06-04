@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from "../api/axiosInstance"; // Import the configured API instance
-import { FiX, FiAlertCircle } from 'react-icons/fi'; // For close and error icons
-import { FaHeart, FaRegHeart } from 'react-icons/fa'; // For favorite icon
-import { BottomTabBar } from '../layouts/BottomTabBar'; // Assuming BottomTabBar is part of the layout
+import api from "../api/axiosInstance";
+import { favoriteService } from '../api/services/favorite.service';
+import { FiX, FiAlertCircle } from 'react-icons/fi';
+import { FaHeart } from 'react-icons/fa';
+import { BottomTabBar } from '../layouts/BottomTabBar';
 
-// Assume necessary types are available, e.g., from ../types/index.ts
+interface BusinessService {
+  id: string;
+  name: string;
+  duration_minutes: number;
+  price: number;
+}
+
 interface Business {
   id: string;
   name: string;
@@ -15,12 +22,13 @@ interface Business {
   banner_url: string;
   logo_url: string;
   distance: string | null;
-  is_favorite?: boolean; // To show favorite status
-  services?: Array<{ id: string; name: string; duration_minutes: number; price: number }>;
+  is_favorite?: boolean;
+  reviewsCount?: number;
+  services?: BusinessService[];
 }
 
 export const BusinessDetail = () => {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [business, setBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,12 +40,9 @@ export const BusinessDetail = () => {
       setLoading(true);
       setError(null);
       try {
-        // Fetch business details and services
-        const response = await api.get(`/business/${id}`);
+        const response = await api.get<Business>(`/business/${id}`);
         setBusiness(response.data);
-        // Assuming the backend might return a favorite status or we fetch it separately
-        // For now, let's assume it's not returned directly and favorite status is managed elsewhere or on toggle
-        // If business data includes favorite status, use it: setIsFavorite(response.data.is_favorite || false);
+        setIsFavorite(response.data.is_favorite ?? false);
       } catch (err) {
         console.error("Error fetching business details:", err);
         setError("No se pudieron cargar los detalles del negocio.");
@@ -51,27 +56,17 @@ export const BusinessDetail = () => {
 
   const handleToggleFavorite = async () => {
     if (!business) return;
-
     try {
-      // Assume an API endpoint to toggle favorite status
-      await api.post('/businesses/favorites/toggle', { businessId: business.id });
-      setIsFavorite(!isFavorite);
-      // You might want to re-fetch user favorites or update UI state more robustly
+      await favoriteService.toggle(business.id);
+      setIsFavorite((prev) => !prev);
     } catch (err) {
       console.error("Error toggling favorite:", err);
-      setError("No se pudo actualizar el estado de favorito.");
     }
   };
 
   const handleBookNow = () => {
-    // TODO: Implement navigation to booking or open booking modal
-    // For now, navigate to a placeholder or a relevant page
-    if (business && business.services && business.services.length > 0) {
-      // Example: Navigate to a booking page, potentially pre-selecting the business and first service
-      navigate(`/appointments?businessId=${business.id}&serviceId=${business.services[0].id}`);
-    } else {
-      alert("Este negocio no tiene servicios configurados para reservar.");
-    }
+    if (!id) return;
+    navigate(`/business/${id}/book`);
   };
 
   if (loading) {
@@ -106,24 +101,24 @@ export const BusinessDetail = () => {
     <div className="min-h-screen bg-background font-display">
       {/* Header con Imagen */}
       <div className="relative h-72 w-full">
-        <img 
-            src={business.banner_url || 'https://via.placeholder.com/600x300?text=Business+Banner'} 
-            alt={`${business.name} banner`} 
-            className="w-full h-full object-cover"
+        <img
+          src={business.banner_url || 'https://via.placeholder.com/600x300?text=Business+Banner'}
+          alt={`${business.name} banner`}
+          className="w-full h-full object-cover"
         />
-        <button 
+        <button
           onClick={() => navigate(-1)}
           className="absolute top-6 left-6 w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white shadow-lg"
-          aria-label="Go back"
+          aria-label="Volver"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
-        <button 
-          onClick={handleToggleFavorite} 
+        <button
+          onClick={handleToggleFavorite}
           className="absolute top-6 right-6 w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white shadow-lg"
-          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+          aria-label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
         >
-          <FaHeart className={`text-xl ${isFavorite ? 'text-red-500' : 'text-white'}`}/>
+          <FaHeart className={`text-xl ${isFavorite ? 'text-red-500' : 'text-white'}`} />
         </button>
       </div>
 
@@ -142,7 +137,7 @@ export const BusinessDetail = () => {
               <h1 className="text-3xl font-black text-secondary uppercase tracking-tight line-clamp-1">{business.name}</h1>
               <div className="flex items-center mt-1 text-primary">
                 <span className="material-symbols-outlined text-sm">star</span>
-                <span className="font-bold ml-1">{business.rating_avg?.toFixed(1) || 'N/A'} ({business.reviewsCount || 0} reseñas)</span> {/* Assuming reviewsCount is available or fetched */}
+                <span className="font-bold ml-1">{business.rating_avg?.toFixed(1) || 'N/A'} ({business.reviewsCount ?? 0} reseñas)</span>
               </div>
               <p className="text-sm text-slate-400 mt-1 line-clamp-1">{business.address}</p>
             </div>
@@ -160,8 +155,8 @@ export const BusinessDetail = () => {
                 </div>
                 <div className="text-right">
                   <p className="font-black text-primary text-lg">${service.price.toLocaleString('es-AR')}</p>
-                  <button 
-                    onClick={() => handleBookNow()} // This should ideally pass service.id and business.id
+                  <button
+                    onClick={handleBookNow}
                     className="mt-1 text-xs font-bold uppercase tracking-wider text-primary underline"
                   >
                     Reservar
@@ -177,7 +172,7 @@ export const BusinessDetail = () => {
         {/* Primary CTA: Book Appointment */}
         <div className="mt-8 sticky bottom-24 z-20">
           <button
-            onClick={handleBookNow} 
+            onClick={handleBookNow}
             className="w-full bg-primary text-slate-950 py-4 rounded-2xl font-bold shadow-lg shadow-primary/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
           >
             <span className="material-symbols-outlined">calendar_add_on</span>
@@ -185,11 +180,9 @@ export const BusinessDetail = () => {
           </button>
         </div>
       </div>
-      
+
       {/* Navigation Bar */}
       <footer className="sticky bottom-0 left-0 right-0 z-50">
-        {/* The active tab logic needs to be correctly passed. */}
-        {/* Assuming 'home' for explore page */}
         <BottomTabBar activeTab="home" />
       </footer>
     </div>

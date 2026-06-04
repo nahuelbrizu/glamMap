@@ -1,104 +1,93 @@
-// src/controllers/appointmentController.ts
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import * as appointmentService from '../services/appointmentService';
 import { syncWithGoogle } from '../services/calendarService';
-import { pool } from '../config/db';
 
-export const createAppointment = async (req: Request, res: Response) => {
-    const { business_id, service_id, start_time, notes } = req.body;
-    const client_id = req.user.id;
+export const createAppointment = async (req: Request, res: Response, next: NextFunction) => {
+    const { business_id, service_id, start_time, notes } = req.body as {
+        business_id: number;
+        service_id: number;
+        start_time: string;
+        notes: string;
+    };
+    const clientId = req.user.id;
 
     try {
-        const serviceData = await appointmentService.getServiceById(service_id);
-        if (!serviceData) {
-            return res.status(404).json({ message: "Servicio no encontrado" });
+        const service = await appointmentService.getServiceById(service_id);
+        if (!service) {
+            return res.status(404).json({ message: 'Servicio no encontrado' });
         }
-        
-        const duration = serviceData.duration;
+
         const startDate = new Date(start_time);
-        const endDate = new Date(startDate.getTime() + duration * 60000);
+        const endDate = new Date(startDate.getTime() + service.duration_minutes * 60_000);
 
-        const businessName = await appointmentService.getBusinessNameById(business_id);
+        const [businessName, appointment] = await Promise.all([
+            appointmentService.getBusinessNameById(business_id),
+            appointmentService.createAppointment(clientId, business_id, service_id, startDate, endDate, notes),
+        ]);
 
-        const createdAppointment = await appointmentService.createAppointment(client_id, business_id, service_id, startDate, endDate, notes);
-
-        const userTokens = await pool.query(
-            'SELECT google_calendar_token FROM users WHERE id = $1',
-            [client_id]
-        );
-
-        if (userTokens.rows.length > 0 && userTokens.rows[0].google_calendar_token) {
-            try {
-                await syncWithGoogle(
-                    client_id,
-                    pool,
-                    {
-                        userAccessToken: userTokens.rows[0].google_calendar_token,
-                    },
-                    {
-                        businessName: businessName,
-                        serviceName: serviceData.service_name,
-                        startTime: createdAppointment.start_time.toISOString(),
-                        endTime: createdAppointment.end_time.toISOString(),
-                    }
-                );
-            } catch (syncError) {
-                console.error("Error syncing appointment with Google Calendar:", syncError);
-            }
+        const { accessToken, refreshToken } = await appointmentService.getUserGoogleTokens(clientId);
+        if (accessToken) {
+            syncWithGoogle(
+                clientId,
+                { userAccessToken: accessToken, userRefreshToken: refreshToken },
+                {
+                    businessName,
+                    serviceName: service.service_name,
+                    startTime: (appointment.start_time as Date).toISOString(),
+                    endTime: (appointment.end_time as Date).toISOString(),
+                }
+            ).catch((err: unknown) => console.error('Google Calendar sync failed:', err));
         }
 
-        res.status(201).json({
-            message: "¡Turno reservado con éxito!",
-            appointment: createdAppointment
-        });
+        res.status(201).json({ message: '¡Turno reservado con éxito!', appointment });
     } catch (error) {
-        console.error("Error al crear cita:", error);
-        res.status(500).json({ message: "Error al procesar la reserva" });
+        next(error);
     }
 };
 
-export const getUserAppointments = async (req: Request, res: Response) => {
-    const clientId = req.user.id;
+export const getUserAppointments = async (req: Request, res: Response, next: NextFunction) => {
+    const page = parseInt((req.query.page as string) || '1', 10);
+    const limit = parseInt((req.query.limit as string) || '20', 10);
 
     try {
-        const appointments = await appointmentService.getUserAppointments(clientId);
-        res.json(appointments);
+        const result = await appointmentService.getUserAppointments(req.user.id, page, limit);
+        res.json(result);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error al obtener los turnos' });
+        next(error);
     }
 };
-export const cancelAppointment = async (req: Request, res: Response) => {
+
+export const cancelAppointment = async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
-    const clientId = req.user.id;
 
     try {
-        const appointment = await appointmentService.cancelAppointment(parseInt(id, 10), clientId);
+        const appointment = await appointmentService.cancelAppointment(parseInt(id, 10), req.user.id);
 
         if (!appointment) {
-            return res.status(404).json({
-                message: 'Turno no encontrado o ya cancelado'
-            });
+            return res.status(404).json({ message: 'Turno no encontrado o ya cancelado' });
         }
 
-        res.json({
-            message: 'Turno cancelado correctamente',
-            appointment
-        });
+        res.json({ message: 'Turno cancelado correctamente', appointment });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error al cancelar el turno' });
+        next(error);
     }
 };
 
-export const getAvailableSlots = async (req: Request, res: Response) => {
-    const { business_id, date } = req.query;
+export const getAvailableSlots = async (req: Request, res: Response, next: NextFunction) => {
+    const { business_id, date, service_id } = req.query as {
+        business_id: string;
+        date: string;
+        service_id?: string;
+    };
 
     try {
-        const slots = await appointmentService.getAvailableSlots(parseInt(business_id as string, 10), date as string);
+        const slots = await appointmentService.getAvailableSlots(
+            parseInt(business_id, 10),
+            date,
+            service_id ? parseInt(service_id, 10) : undefined
+        );
         res.json(slots);
     } catch (error) {
-        console.error("Error al calcular huecos:", error);
-        res.status(500).json({ message: "Error al obtener disponibilidad" });
+        next(error);
     }
 };

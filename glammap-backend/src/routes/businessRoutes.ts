@@ -1,38 +1,18 @@
-// src/routes/businessRoutes.ts
-import { Router } from "express";
-import { authenticateToken } from "../middlewares/authMiddleware";
-import {
-  createBusiness,
-  getExploreBusinesses,
-  getBusinessById
-} from "../controllers/businessController";
+import { Router } from 'express';
+import { authenticateToken } from '../middlewares/authMiddleware';
+import { createBusiness, getExploreBusinesses, getBusinessById } from '../controllers/businessController';
+import { updateBusinessHours } from '../controllers/scheduleController';
 
 const router = Router();
 
-/* =========================
-   🌍 RUTAS PÚBLICAS
-   ========================= */
+// --- PUBLIC ---
+router.get('/explore', getExploreBusinesses);
 
-/**
- * GET /api/business/explore
- */
-router.get("/explore", getExploreBusinesses);
+// --- OWNER ONLY ---
+router.post('/', authenticateToken, createBusiness);
+router.put('/schedule', authenticateToken, updateBusinessHours);
 
-/* =========================
-   🔒 RUTAS PROTEGIDAS
-   ========================= */
-
-/**
- * Crear un negocio
- * POST /api/business/
- */
-router.post("/", authenticateToken, createBusiness);
-
-/**
- * Obtener detalle de un negocio
- * GET /api/business/:id 
- * CORRECCIÓN: Eliminamos el prefijo '/business' extra porque ya viene de app.ts
- */
-router.get('/:id', authenticateToken, getBusinessById);
+// Dynamic segment MUST come after all static routes
+router.get('/:id', getBusinessById);
 
 export default router;

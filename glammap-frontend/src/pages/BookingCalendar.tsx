@@ -21,7 +21,7 @@ export const BookingCalendar = ({ businessId, onConfirm }: BookingCalendarProps)
       setLoading(true);
       try {
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
-        const response = await api.get(`/user/available-slots`, {
+        const response = await api.get(`/users/appointments/slots`, {
           params: { business_id: businessId, date: dateStr }
         });
         setTimeSlots(response.data);

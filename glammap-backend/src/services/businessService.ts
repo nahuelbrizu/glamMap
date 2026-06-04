@@ -28,43 +28,58 @@ export const createBusiness = async (businessData: any, ownerId: number) => {
     }
 };
 
-export const getExploreBusinesses = async (lat?: number, lng?: number, distance?: number) => {
+export const getExploreBusinesses = async (
+    lat?: number,
+    lng?: number,
+    distance?: number,
+    cursor?: number,
+    limit = 20
+) => {
     let query: string;
-    let values: any[] = [];
+    let values: (number | string)[] = [];
 
-    const searchDistance = distance || 50; 
+    const searchDistance = distance ?? 50;
+    // Bounding box ~0.5 degrees (~55 km) for geospatial pre-filter (S2)
+    const BOX_DEG = 0.5;
 
-    if (lat && lng) {
+    if (lat !== undefined && lng !== undefined) {
+        const cursorClause = cursor !== undefined ? `AND distance > $4` : '';
+        const cursorValues = cursor !== undefined ? [cursor] : [];
+
         query = `
             SELECT * FROM (
-                SELECT 
-                    id, name, type as category, address, latitude, longitude, 
+                SELECT
+                    id, name, type AS category, address, latitude, longitude,
                     rating_avg, banner_url, logo_url,
                     (6371 * acos(
-                        cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) + 
+                        cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) +
                         sin(radians($1)) * sin(radians(latitude))
                     )) AS distance
-                FROM businesses 
-                WHERE is_active = true 
+                FROM businesses
+                WHERE is_active = true
+                  AND latitude  BETWEEN $1 - ${BOX_DEG} AND $1 + ${BOX_DEG}
+                  AND longitude BETWEEN $2 - ${BOX_DEG} AND $2 + ${BOX_DEG}
             ) AS stores_with_distance
             WHERE distance <= $3
-            ORDER BY distance ASC;
+            ${cursorClause}
+            ORDER BY distance ASC
+            LIMIT ${limit};
         `;
-        values = [lat, lng, searchDistance];
+        values = [lat, lng, searchDistance, ...cursorValues];
     } else {
         query = `
-            SELECT id, name, type as category, address, latitude, longitude, 
+            SELECT id, name, type AS category, address, latitude, longitude,
                    rating_avg, banner_url, logo_url
-            FROM businesses 
+            FROM businesses
             WHERE is_active = true
             ORDER BY rating_avg DESC NULLS LAST
-            LIMIT 30;
+            LIMIT ${limit};
         `;
     }
 
     const result = await pool.query(query, values);
 
-    return result.rows.map(b => ({
+    const rows = result.rows.map(b => ({
         id: b.id,
         name: b.name,
         category: b.category,
@@ -72,12 +87,18 @@ export const getExploreBusinesses = async (lat?: number, lng?: number, distance?
         rating_avg: parseFloat(b.rating_avg) || 5.0,
         banner_url: b.banner_url || 'https://via.placeholder.com/400x200?text=Business',
         logo_url: b.logo_url,
-        distance: b.distance ? parseFloat(b.distance).toFixed(1) : null,
+        distance: b.distance ? parseFloat(b.distance) : null,
         position: {
             lat: parseFloat(b.latitude),
-            lng: parseFloat(b.longitude)
-        }
+            lng: parseFloat(b.longitude),
+        },
     }));
+
+    const nextCursor = rows.length === limit && rows[rows.length - 1].distance !== null
+        ? rows[rows.length - 1].distance
+        : null;
+
+    return { data: rows, nextCursor };
 };
 
 export const getBusinessById = async (id: number) => {

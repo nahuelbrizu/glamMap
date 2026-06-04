@@ -1,78 +1,52 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import * as userService from '../services/userService';
 
-/**
- * Obtiene todos los usuarios de la base de datos
- * GET /api/users/all
- */
-export const getAllUsers = async (req: Request, res: Response) => {
-  try {
-    const users = await userService.getAllUsers();
-    res.json(users);
-  } catch (error: any) {
-    console.error("Error en getAllUsers:", error.message);
-    res.status(500).json({ message: "Error al obtener la lista de usuarios" });
-  }
+export const getUserProfile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const user = await userService.getUserProfile(req.user.id);
+
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+
+        res.json(user);
+    } catch (error) {
+        next(error);
+    }
 };
 
-/**
- * Obtiene el perfil del usuario autenticado actualmente
- * GET /api/users/profile
- */
-export const getUserProfile = async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id; 
+export const updateProfile = async (req: Request, res: Response, next: NextFunction) => {
+    const { name, phone } = req.body as { name: string; phone: string };
 
-    if (!userId) {
-      return res.status(401).json({ message: "Usuario no autenticado" });
+    try {
+        const user = await userService.updateProfile(req.user.id, name, phone);
+
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+
+        res.json({ message: 'Perfil actualizado', user });
+    } catch (error) {
+        next(error);
     }
-
-    const user = await userService.getUserProfile(userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
-
-    res.json(user);
-  } catch (error: any) {
-    console.error("Error en getUserProfile:", error.message);
-    res.status(500).json({ message: "Error interno del servidor" });
-  }
 };
 
-/**
- * Actualiza las preferencias de notificación
- */
-export const updateNotificationPrefs = async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id;
-    const { prefs } = req.body; 
+export const updateNotificationPrefs = async (req: Request, res: Response, next: NextFunction) => {
+    const { prefs } = req.body as { prefs: unknown };
 
-    await userService.updateNotificationPrefs(userId, prefs);
-    
-    res.json({ message: "Preferencias actualizadas" });
-  } catch (error: any) {
-    console.error("Error en updateNotificationPrefs:", error.message);
-    res.status(500).json({ message: "Error al actualizar preferencias" });
-  }
-};
-export const updateProfile = async (req: Request, res: Response) => {
-  const { name, phone } = req.body;
-  const userId = (req as any).user.id;
-
-  try {
-    const user = await userService.updateProfile(userId, name, phone);
-
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
+    try {
+        await userService.updateNotificationPrefs(req.user.id, prefs);
+        res.json({ message: 'Preferencias actualizadas' });
+    } catch (error) {
+        next(error);
     }
+};
 
-    res.json({
-      message: "Perfil actualizado",
-      user
-    });
-  } catch (error) {
-    console.error("Error al actualizar perfil:", error);
-    res.status(500).json({ message: "Error interno del servidor" });
-  }
+export const getAllUsers = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+        const users = await userService.getAllUsers();
+        res.json(users);
+    } catch (error) {
+        next(error);
+    }
 };

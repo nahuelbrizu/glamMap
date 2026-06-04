@@ -1,25 +1,25 @@
-import { Request, Response } from "express";
-import * as favoriteService from "../services/favoriteService";
+import { Request, Response, NextFunction } from 'express';
+import * as favoriteService from '../services/favoriteService';
 
-export const getUserFavorites = async (req: Request, res: Response) => {
-  const userId = req.user.id;
+export const getUserFavorites = async (req: Request, res: Response, next: NextFunction) => {
+    const page = parseInt((req.query.page as string) || '1', 10);
+    const limit = parseInt((req.query.limit as string) || '20', 10);
 
-  try {
-    const favorites = await favoriteService.getUserFavorites(userId);
-    res.json(favorites);
-  } catch (error) {
-    res.status(500).json({ message: "Error al obtener favoritos" });
-  }
+    try {
+        const result = await favoriteService.getUserFavorites(req.user.id, page, limit);
+        res.json(result);
+    } catch (error) {
+        next(error);
+    }
 };
 
-export const toggleFavorite = async (req: Request, res: Response) => {
-  const { businessId } = req.body;
-  const userId = req.user.id;
+export const toggleFavorite = async (req: Request, res: Response, next: NextFunction) => {
+    const { businessId } = req.body as { businessId: number };
 
-  try {
-    const status = await favoriteService.toggleFavorite(userId, businessId);
-    res.json({ status });
-  } catch (error) {
-    res.status(500).json({ message: "Error en favoritos" });
-  }
+    try {
+        const status = await favoriteService.toggleFavorite(req.user.id, businessId);
+        res.json({ status });
+    } catch (error) {
+        next(error);
+    }
 };

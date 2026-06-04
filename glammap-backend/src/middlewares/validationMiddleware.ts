@@ -8,9 +8,6 @@ export const registerValidationRules = () => {
       .isLength({ min: 6 })
       .withMessage('Password must be at least 6 characters long'),
     body('name').not().isEmpty().withMessage('Name is required'),
-    body('role')
-      .isIn(['client', 'owner'])
-      .withMessage('Role must be either client or owner'),
   ];
 };
 

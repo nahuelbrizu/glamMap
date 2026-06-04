@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import passport from 'passport';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import {
   registerValidationRules,
   loginValidationRules,
@@ -12,7 +13,16 @@ import {
   register,
   loginEmail,
   getMe,
+  refreshToken,
 } from '../controllers/auth.controller';
+
+const authRateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    message: { message: 'Demasiados intentos. Por favor espera un minuto.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
 const router = Router();
 
@@ -39,35 +49,39 @@ router.get(
     failureRedirect: `${process.env.FRONTEND_URL}/login?error=auth_failed`,
   }),
   (req, res) => {
-    const user = req.user as any;
+    const user = req.user as { id: string; role: string; name: string };
 
-    // 1. Firmamos el token incluyendo más info útil para el frontend
-    const token = jwt.sign(
-      {
-        id: user.id,
-        role: user.role,
-        name: user.name,
-      },
+    // Issue short-lived access token (15m) + httpOnly refresh cookie (7d)
+    const accessToken = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET!,
+      { expiresIn: '15m' }
+    );
+    const refreshJwt = jwt.sign(
+      { id: user.id, role: user.role },
       process.env.JWT_SECRET!,
       { expiresIn: '7d' }
     );
+    res.cookie('refresh_token', refreshJwt, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
-    /**
-     * 2. REDIRECCIÓN INTELIGENTE
-     * Si el usuario es un 'owner' (dueño), quizás quieras mandarlo 
-     * directo a su panel, si es 'client' al mapa.
-     * Pasamos también el rol para que el frontend sepa a dónde navegar.
-     */
     res.redirect(
-      `${process.env.FRONTEND_URL}/auth-success?token=${token}&role=${user.role}`
+      `${process.env.FRONTEND_URL}/auth-success?token=${accessToken}&role=${user.role}`
     );
   }
 );
 // Ruta de Registro: POST /api/auth/register
-router.post('/register', registerValidationRules(), validate, register);
+router.post('/register', authRateLimiter, registerValidationRules(), validate, register);
 
 // Ruta de Login: POST /api/auth/login
-router.post('/login', loginValidationRules(), validate, loginEmail);
+router.post('/login', authRateLimiter, loginValidationRules(), validate, loginEmail);
+
+// Ruta de refresh token: POST /api/auth/refresh
+router.post('/refresh', refreshToken);
 
 // Ruta de Perfil: GET /api/auth/me
 router.get('/me', authenticateToken, getMe);

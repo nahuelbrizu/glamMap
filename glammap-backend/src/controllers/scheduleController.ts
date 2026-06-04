@@ -1,15 +1,14 @@
-// src/controllers/scheduleController.ts
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import * as scheduleService from '../services/scheduleService';
+import type { BusinessHour } from '../types/index';
 
-export const updateBusinessHours = async (req: Request, res: Response) => {
-    const { hours } = req.body;
-    const userId = req.user.id;
+export const updateBusinessHours = async (req: Request, res: Response, next: NextFunction) => {
+    const { hours } = req.body as { hours: BusinessHour[] };
 
     try {
-        await scheduleService.updateBusinessHours(userId, hours);
-        res.json({ message: "Horarios actualizados con éxito" });
+        await scheduleService.updateBusinessHours(req.user.id, hours);
+        res.json({ message: 'Horarios actualizados con éxito' });
     } catch (error) {
-        res.status(500).json({ message: "Error al guardar horarios" });
+        next(error);
     }
 };
