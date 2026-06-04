@@ -46,11 +46,11 @@
 
 ## 🟠 Alta prioridad — gaps del producto core
 
-- [ ] **H1 · Seed data de demo**
+- [x] **H1 · Seed data de demo**
   - [x] Crear `scripts/seed.ts` con 8-10 negocios de Buenos Aires
   - [x] Incluir coordenadas reales, servicios, horarios y fotos placeholder
   - [x] Agregar script `"seed": "ts-node-dev --transpile-only scripts/seed.ts"` en `package.json`
-  - [ ] Documentar en README cómo correr el seed
+  - [x] Documentar en README cómo correr el seed
 
 - [x] **H2 · Panel de turnos para el owner**
   - [x] Agregar `GET /api/owner/appointments` (filtrado por negocio del owner autenticado)
@@ -113,13 +113,13 @@
   - [x] Agregar bloque de validación al inicio de `server.ts` que valide `JWT_SECRET`, `DB_*`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
   - [x] Lanzar error claro y terminar el proceso si alguna falta
 
-- [ ] **Q8 · Tests de integración**
-  - [ ] Configurar base de datos de test separada
-  - [ ] Test: registro → login → obtener perfil
-  - [ ] Test: crear turno → verificar `end_time` válido
-  - [ ] Test: `getAvailableSlots` con negocio cerrado ese día
-  - [ ] Test: reseña sin turno completado → debe rechazar
-  - [ ] Test: toggle favorito → add y remove
+- [x] **Q8 · Tests de integración**
+  - [x] Configurar base de datos de test separada
+  - [x] Test: registro → login → obtener perfil
+  - [x] Test: crear turno → verificar `end_time` válido
+  - [x] Test: `getAvailableSlots` con negocio cerrado ese día
+  - [x] Test: reseña sin turno completado → debe rechazar
+  - [x] Test: toggle favorito → add y remove
 
 ---
 
@@ -132,9 +132,9 @@
   - [ ] Retornar CDN URL y guardar en `banner_url` / `logo_url`
   - [ ] Agregar botón de upload en `BusinessProfile.tsx`
 
-- [ ] **S2 · Índice geoespacial**
+- [x] **S2 · Índice geoespacial**
   - [x] Solución rápida: agregar pre-filtro de bounding box en queries Haversine
-  - [ ] Solución definitiva: habilitar extensión PostGIS, columna `geography`, índice `GIST`, query con `ST_DWithin`
+  - [x] Solución definitiva: habilitar extensión PostGIS, columna `geography`, índice `GIST`, query con `ST_DWithin`
 
 - [x] **S3 · JWT de corta duración + refresh token**
   - [x] Cambiar access token a 15 minutos
@@ -149,11 +149,11 @@
     - Servicio más solicitado
   - [x] Conectar con `OwnerDashboard.tsx` / `DashboardGeneral.tsx`
 
-- [ ] **S5 · Notificaciones por email**
-  - [ ] Elegir proveedor (Resend recomendado)
-  - [ ] Definir schema de `notification_prefs`: `{ email: boolean, reminders: boolean }`
-  - [ ] Enviar email al crear turno (cliente) y al recibir turno (owner)
-  - [ ] Enviar recordatorio 24h antes del turno
+- [x] **S5 · Notificaciones por email**
+  - [x] Elegir proveedor (Resend recomendado)
+  - [x] Definir schema de `notification_prefs`: `{ email: boolean, reminders: boolean }`
+  - [x] Enviar email al crear turno (cliente) y al recibir turno (owner)
+  - [x] Enviar recordatorio 24h antes del turno
 
 ---
 

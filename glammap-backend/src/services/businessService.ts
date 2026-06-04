@@ -1,6 +1,18 @@
 import { pool } from '../config/db';
 
-export const createBusiness = async (businessData: any, ownerId: number) => {
+export const createBusiness = async (
+    businessData: {
+        name: string;
+        type: string;
+        address: string;
+        latitude: number;
+        longitude: number;
+        phone?: string;
+        description?: string;
+        [key: string]: unknown;
+    },
+    ownerId: string
+) => {
     const { name, type, address, latitude, longitude, phone, description } = businessData;
     const client = await pool.connect();
     try {
@@ -12,13 +24,13 @@ export const createBusiness = async (businessData: any, ownerId: number) => {
             RETURNING *;
         `;
         const values = [ownerId, name, type, address, latitude, longitude, phone, description];
-        
+
         const result = await client.query(query, values);
-        
+
         await client.query("UPDATE users SET role = 'owner' WHERE id = $1", [ownerId]);
-        
+
         await client.query('COMMIT');
-        
+
         return result.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
@@ -38,34 +50,55 @@ export const getExploreBusinesses = async (
     let query: string;
     let values: (number | string)[] = [];
 
-    const searchDistance = distance ?? 50;
-    // Bounding box ~0.5 degrees (~55 km) for geospatial pre-filter (S2)
-    const BOX_DEG = 0.5;
+    const searchDistanceKm = distance ?? 50;
+    const searchDistanceM = searchDistanceKm * 1000; // convert km → metres for ST_DWithin
 
     if (lat !== undefined && lng !== undefined) {
-        const cursorClause = cursor !== undefined ? `AND distance > $4` : '';
-        const cursorValues = cursor !== undefined ? [cursor] : [];
+        const cursorClause = cursor !== undefined ? `AND dist_m > $4` : '';
+        const cursorValues: number[] = cursor !== undefined ? [cursor] : [];
 
+        // PostGIS ST_DWithin query (requires 002_postgis_geography.sql migration)
         query = `
             SELECT * FROM (
                 SELECT
                     id, name, type AS category, address, latitude, longitude,
                     rating_avg, banner_url, logo_url,
-                    (6371 * acos(
-                        cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) +
-                        sin(radians($1)) * sin(radians(latitude))
-                    )) AS distance
+                    ST_Distance(location, ST_MakePoint($2, $1)::geography) AS dist_m
                 FROM businesses
                 WHERE is_active = true
-                  AND latitude  BETWEEN $1 - ${BOX_DEG} AND $1 + ${BOX_DEG}
-                  AND longitude BETWEEN $2 - ${BOX_DEG} AND $2 + ${BOX_DEG}
+                  AND ST_DWithin(location, ST_MakePoint($2, $1)::geography, $3)
             ) AS stores_with_distance
-            WHERE distance <= $3
+            WHERE dist_m <= $3
             ${cursorClause}
-            ORDER BY distance ASC
+            ORDER BY dist_m ASC
             LIMIT ${limit};
         `;
-        values = [lat, lng, searchDistance, ...cursorValues];
+        values = [lat, lng, searchDistanceM, ...cursorValues];
+
+        // Haversine fallback — use if PostGIS is not available:
+        // const BOX_DEG = 0.5;
+        // const cursorClause = cursor !== undefined ? `AND distance > $4` : '';
+        // const cursorValues: number[] = cursor !== undefined ? [cursor] : [];
+        // query = `
+        //     SELECT * FROM (
+        //         SELECT
+        //             id, name, type AS category, address, latitude, longitude,
+        //             rating_avg, banner_url, logo_url,
+        //             (6371 * acos(
+        //                 cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) +
+        //                 sin(radians($1)) * sin(radians(latitude))
+        //             )) AS distance
+        //         FROM businesses
+        //         WHERE is_active = true
+        //           AND latitude  BETWEEN $1 - ${BOX_DEG} AND $1 + ${BOX_DEG}
+        //           AND longitude BETWEEN $2 - ${BOX_DEG} AND $2 + ${BOX_DEG}
+        //     ) AS stores_with_distance
+        //     WHERE distance <= $3
+        //     ${cursorClause}
+        //     ORDER BY distance ASC
+        //     LIMIT ${limit};
+        // `;
+        // values = [lat, lng, searchDistanceKm, ...cursorValues];
     } else {
         query = `
             SELECT id, name, type AS category, address, latitude, longitude,
@@ -87,15 +120,15 @@ export const getExploreBusinesses = async (
         rating_avg: parseFloat(b.rating_avg) || 5.0,
         banner_url: b.banner_url || 'https://via.placeholder.com/400x200?text=Business',
         logo_url: b.logo_url,
-        distance: b.distance ? parseFloat(b.distance) : null,
+        distance: b.dist_m ? parseFloat(b.dist_m) / 1000 : null, // convert back to km for API response
         position: {
             lat: parseFloat(b.latitude),
             lng: parseFloat(b.longitude),
         },
     }));
 
-    const nextCursor = rows.length === limit && rows[rows.length - 1].distance !== null
-        ? rows[rows.length - 1].distance
+    const nextCursor = rows.length === limit && rows[rows.length - 1]?.distance !== null
+        ? rows[rows.length - 1]?.distance ?? null
         : null;
 
     return { data: rows, nextCursor };

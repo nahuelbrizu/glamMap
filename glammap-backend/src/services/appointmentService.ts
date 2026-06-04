@@ -1,6 +1,7 @@
 import { pool } from '../config/db';
 import { NotFoundError, ForbiddenError, BadRequestError } from '../errors/customErrors';
 import type { AppointmentStatus } from '../types/index';
+import * as emailService from './emailService';
 
 export const getServiceById = async (serviceId: number) => {
     const result = await pool.query(
@@ -45,7 +46,48 @@ export const createAppointment = async (
          RETURNING *`,
         [clientId, businessId, serviceId, startTime, endTime, notes]
     );
-    return result.rows[0];
+
+    const appointment = result.rows[0];
+
+    // Fetch client email + owner email for notifications
+    const emailResult = await pool.query(
+        `SELECT
+             u.email          AS client_email,
+             o.email          AS owner_email,
+             s.name           AS service_name,
+             b.name           AS business_name
+         FROM appointments a
+         JOIN users u         ON u.id = a.client_id
+         JOIN businesses b    ON b.id = a.business_id
+         JOIN users o         ON o.id = b.owner_id
+         JOIN services s      ON s.id = a.service_id
+         WHERE a.id = $1`,
+        [appointment.id]
+    );
+
+    if (emailResult.rows.length > 0) {
+        const { client_email, owner_email, service_name, business_name } = emailResult.rows[0] as {
+            client_email: string;
+            owner_email: string;
+            service_name: string;
+            business_name: string;
+        };
+
+        const emailData: emailService.AppointmentEmailData = {
+            id: appointment.id,
+            start_time: appointment.start_time,
+            end_time: appointment.end_time,
+            service_name,
+            business_name,
+            notes: appointment.notes ?? undefined,
+        };
+
+        // Fire-and-forget: don't await, don't let failures bubble up
+        void emailService.sendAppointmentConfirmationToClient(emailData, client_email);
+        void emailService.sendNewAppointmentToOwner(emailData, owner_email);
+    }
+
+    return appointment;
 };
 
 export const getUserAppointments = async (
